@@ -1,0 +1,24 @@
+[project]
+name = "subs2cia"
+description = "A subtitle-based multimedia extractor and compressor"
+license = "MIT"
+license-files = ["LICENSE"]
+version = "0.0.1"
+dependencies = [
+]
+authors = [
+	{name = "Benjamin Hottell", email = "benjaminhottell@gmail.com"},
+]
+classifiers = [
+	"Development Status :: 4 - Beta",
+	"Programming Language :: Python :: 3",
+]
+
+[tool.poetry.packages]
+include = [
+	"subs2cia",
+]
+
+[project.urls]
+Repository = "https://github.com/benjaminhottell/subs2cia"
+
