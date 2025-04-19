@@ -1,7 +1,10 @@
 import typing as ty
 
+import logging
 import subprocess
 import json
+
+logger = logging.getLogger(__name__)
 
 
 class FfprobeStream:
@@ -102,29 +105,29 @@ class FfprobeWrapper:
     ):
         self._ffprobe_cmd = ffprobe_cmd
         self._process_encoding = process_encoding
+        self._cached_results: dict[str, FfprobeResult] = dict()
 
     def probe(
         self,
         target_path: str,
-        show_streams: bool = False,
-        show_format: bool = False,
+        allow_cache: bool = True,
         encoding: str = 'utf-8',
     ) -> FfprobeResult:
+
+        if allow_cache and target_path in self._cached_results:
+            return self._cached_results[target_path]
 
         args = [
             self._ffprobe_cmd,
             '-v', 'quiet',
             '-print_format', 'json',
+            '-show_streams',
         ]
-
-        if show_format:
-            args.append('-show_format')
-
-        if show_streams:
-            args.append('-show_streams')
 
         args.append('--')
         args.append(target_path)
+
+        logger.debug(f'Invoking ffprobe: {args}')
 
         p = subprocess.run(
             args,
@@ -133,10 +136,14 @@ class FfprobeWrapper:
             check=True,
         )
 
-        ret = json.loads(p.stdout)
+        raw_result = json.loads(p.stdout)
 
-        if not isinstance(ret, dict):
+        if not isinstance(raw_result, dict):
             raise TypeError('ffprobe returned an unexpected JSON value, expected a dict (object)')
 
-        return FfprobeResult(ret)
+        result = FfprobeResult(raw_result)
+
+        self._cached_results[target_path] = result
+
+        return result
 

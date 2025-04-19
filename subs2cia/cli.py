@@ -365,15 +365,11 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         if input_audio_path is not None:
             audio_probe = ffprobe.probe(
                 target_path=input_audio_path,
-                show_streams=True,
             )
 
-        if input_audio_path == input_video_path:
-            video_probe = audio_probe
-        elif input_video_path is not None:
+        if input_video_path is not None:
             video_probe = ffprobe.probe(
                 target_path=input_video_path,
-                show_streams=True,
             )
 
         # We also need to probe the subtitles file,
@@ -382,15 +378,9 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         subs_is_standalone = subtitles.is_supported_file(input_subs_path)
 
         if not subs_is_standalone:
-            if input_subs_path == input_audio_path:
-                subs_probe = audio_probe
-            elif input_subs_path == input_video_path:
-                subs_probe = video_probe
-            else:
-                subs_probe = ffprobe.probe(
-                    target_path=input_subs_path,
-                    show_streams=True,
-                )
+            subs_probe = ffprobe.probe(
+                target_path=input_subs_path,
+            )
 
 
         # Each input file consists of one or more streams
