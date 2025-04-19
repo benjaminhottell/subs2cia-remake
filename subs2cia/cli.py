@@ -9,9 +9,14 @@ import tempfile
 
 from subs2cia import (
     path_helpers,
-    ffprobe_helpers,
     ffmpeg_helpers,
     subtitles,
+)
+
+from subs2cia.ffprobe_wrapper import (
+    FfprobeResult,
+    FfprobeStream,
+    FfprobeWrapper,
 )
 
 from subs2cia.time_ranges import TimeRanges
@@ -224,7 +229,6 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
     subs_keep_blank: bool = args.keep_blank_subs
 
     ffmpeg_cmd: str = args.ffmpeg_cmd
-    ffprobe_cmd: str = args.ffprobe_cmd
 
 
     # Resolve path to output
@@ -323,6 +327,14 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             padding_end = 0.0
 
 
+
+    # Resolve wrappers to external binaries
+
+    ffprobe = FfprobeWrapper(
+        ffprobe_cmd=args.ffprobe_cmd,
+    )
+
+
     # Create a list of things that need to be closed when done
 
     close_later = list()
@@ -346,13 +358,12 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         # (Note that probing invokes a subprocess and is therefore expensive,
         # so try to re-use probes whenever possible)
 
-        audio_probe: dict[str, ty.Any]|None = None
-        video_probe: dict[str, ty.Any]|None = None
-        subs_probe: dict[str, ty.Any]|None = None
+        audio_probe: FfprobeResult|None = None
+        video_probe: FfprobeResult|None = None
+        subs_probe: FfprobeResult|None = None
 
         if input_audio_path is not None:
-            audio_probe = ffprobe_helpers.run_ffprobe(
-                ffprobe_cmd=ffprobe_cmd,
+            audio_probe = ffprobe.probe(
                 target_path=input_audio_path,
                 show_streams=True,
             )
@@ -360,8 +371,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         if input_audio_path == input_video_path:
             video_probe = audio_probe
         elif input_video_path is not None:
-            video_probe = ffprobe_helpers.run_ffprobe(
-                ffprobe_cmd=ffprobe_cmd,
+            video_probe = ffprobe.probe(
                 target_path=input_video_path,
                 show_streams=True,
             )
@@ -377,8 +387,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             elif input_subs_path == input_video_path:
                 subs_probe = video_probe
             else:
-                subs_probe = ffprobe_helpers.run_ffprobe(
-                    ffprobe_cmd=ffprobe_cmd,
+                subs_probe = ffprobe.probe(
                     target_path=input_subs_path,
                     show_streams=True,
                 )
@@ -388,78 +397,39 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         # (Unless the subtitles file is a standalone subtitles file)
         # We need to select one stream to use
 
-        audio_stream: dict[str, ty.Any]|None = None
-        video_stream: dict[str, ty.Any]|None = None
-        subs_stream: dict[str, ty.Any]|None = None
+        audio_stream: FfprobeStream|None = None
+        video_stream: FfprobeStream|None = None
+        subs_stream: FfprobeStream|None = None
 
         if audio_probe is not None:
-            if input_audio_index is None:
-                audio_stream = ffprobe_helpers.get_first_stream(
-                    probe_result=audio_probe,
-                    codec_type='audio',
-                )
-            else:
-                audio_stream = ffprobe_helpers.select_stream(
-                    probe_result=audio_probe,
-                    index=input_audio_index,
-                )
+            audio_stream = audio_probe.get_first_stream_matching(
+                index=input_audio_index,
+                codec_type='audio',
+            )
 
         if video_probe is not None:
-            if input_video_index is None:
-                video_stream = ffprobe_helpers.get_first_stream(
-                    probe_result=video_probe,
-                    codec_type='video',
-                )
-            else:
-                video_stream = ffprobe_helpers.select_stream(
-                    probe_result=video_probe,
-                    index=input_video_index,
-                )
+            video_stream = video_probe.get_first_stream_matching(
+                index=input_video_index,
+                codec_type='video',
+            )
 
         if subs_probe is not None:
-            if input_subs_index is None:
-                subs_stream = ffprobe_helpers.get_first_stream(
-                    probe_result=subs_probe,
-                    codec_type='subtitle',
-                )
-            else:
-                subs_stream = ffprobe_helpers.select_stream(
-                    probe_result=subs_probe,
-                    index=input_subs_index,
-                )
+            subs_stream = subs_probe.get_first_stream_matching(
+                index=input_subs_index,
+                codec_type='subtitle',
+            )
+
+
+        # Avoid confusion, use get_index() on the stream itself :)
+        del input_audio_index
+        del input_video_index
+        del input_subs_index
+
 
         # Error condition check
         if audio_stream is None and video_stream is None:
             print('No audio or video stream found.', file=sys.stderr)
             return 1
-
-        # Now that the chosen streams are known, we can deduce the chosen stream indexes if needed
-
-        if input_audio_index is None and audio_stream is not None:
-            input_audio_index = ffprobe_helpers.get_stream_index(audio_stream)
-
-        if input_video_index is None and video_stream is not None:
-            input_video_index = ffprobe_helpers.get_stream_index(video_stream)
-
-        if input_subs_index is None and subs_stream is not None:
-            input_subs_index = ffprobe_helpers.get_stream_index(subs_stream)
-
-
-        # For the audio and/or video streams, we need to know the 'units per second'
-        # This is the reciprocal of their time_base
-        # This will help us sync up their content with the subtitles
-
-        audio_stream_units_per_second = (
-            ffprobe_helpers.get_stream_units_per_second(audio_stream)
-            if audio_stream is not None
-            else None
-        )
-
-        video_stream_units_per_second = (
-            ffprobe_helpers.get_stream_units_per_second(video_stream)
-            if video_stream is not None
-            else None
-        )
 
 
         # Next we need to parse the subtitles
@@ -474,9 +444,14 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         # In cases 2/3, we need to 'extract' (demux) the subtitles stream into a supported format
         # The codebase supports '.ass' files so this is a reasonable format to extract to
 
-        if subs_stream is not None:
+        if not subs_is_standalone:
 
             # Case: Demux the subtitles, parse them
+
+            if subs_stream is None:
+                print('Cannot find a subtitles stream or supported subtitles file', file=sys.stderr)
+                print('Input subs. path:', input_subs_path, file=sys.stderr)
+                return 1
 
             extraction_suffix = '.ass'
 
@@ -488,7 +463,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             ffmpeg_helpers.demux_stream(
                 ffmpeg_cmd=ffmpeg_cmd,
                 input_path=input_subs_path,
-                stream_index=ffprobe_helpers.get_stream_index(subs_stream),
+                stream_index=subs_stream.get_index(),
                 output_path=extraction_path,
                 overwrite=True,
             )
@@ -553,14 +528,18 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         # Find the corresponding time ranges in the audio/video
 
         audio_time_ranges = (
-            subs_time_ranges.with_units_per_second(audio_stream_units_per_second)
-            if audio_stream_units_per_second is not None
+            subs_time_ranges.with_units_per_second(
+                audio_stream.get_units_per_second()
+            )
+            if audio_stream is not None
             else None
         )
 
         video_time_ranges = (
-            subs_time_ranges.with_units_per_second(video_stream_units_per_second)
-            if video_stream_units_per_second is not None
+            subs_time_ranges.with_units_per_second(
+                video_stream.get_units_per_second()
+            )
+            if video_stream is not None
             else None
         )
 
@@ -604,12 +583,12 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
                     file=filter_file,
                     audio_time_ranges=audio_time_ranges,
                     audio_file_index=audio_file_index,
-                    audio_stream_index=input_audio_index,
+                    audio_stream_index=audio_stream.get_index(),
                 )
                 if (
                     audio_time_ranges is not None 
                     and audio_file_index is not None
-                    and input_audio_index is not None
+                    and audio_stream is not None
                 )
                 else None
             )
@@ -619,12 +598,12 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
                     file=filter_file,
                     video_time_ranges=video_time_ranges,
                     video_file_index=video_file_index,
-                    video_stream_index=input_video_index,
+                    video_stream_index=video_stream.get_index(),
                 )
                 if (
                     video_time_ranges is not None
                     and video_file_index is not None
-                    and input_video_index is not None
+                    and video_stream is not None
                 )
                 else None
             )
