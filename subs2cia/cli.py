@@ -185,6 +185,26 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
     )
 
     parser.add_argument(
+        '--remove-subs-containing', '--remove-subtitles-containing',
+        help=(
+            'Remove subtitles containing the given string. '
+            'The comparison is case sensitive. '
+            'You may specify this command multiple times.'
+        ),
+        action='append',
+    )
+
+    parser.add_argument(
+        '--keep-subs-containing', '--keep-subtitles-containing',
+        help=(
+            'Keep only subtitles containing the given string. '
+            'The comparison is case sensitive. '
+            'You may specify this command multiple times.'
+        ),
+        action='append',
+    )
+
+    parser.add_argument(
         '--scratch-path',
         help=(
             'Path to a directory to use as a scratch directory for temporary files. '
@@ -228,6 +248,8 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
     allow_overwrite: bool = args.overwrite
 
     subs_keep_blank: bool = args.keep_blank_subs
+    subs_remove_containing: ty.Sequence[str] = args.remove_subs_containing
+    subs_keep_containing: ty.Sequence[str] = args.keep_subs_containing
 
     ffmpeg_cmd: str = args.ffmpeg_cmd
 
@@ -435,6 +457,8 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         cli_common.modify_subtitles(
             subs=subs,
             keep_blank=subs_keep_blank,
+            remove_containing=subs_remove_containing,
+            keep_containing=subs_keep_containing,
         )
 
 

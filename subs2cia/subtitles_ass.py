@@ -32,7 +32,7 @@ def parse_time(field: str) -> int:
 def unparse_time(hundredths: int) -> str:
 
     if hundredths < 0:
-        raise ValueError('Negative time cannot exist')
+        raise ValueError(f'Negative time cannot exist, got {hundredths}')
 
     unparse_hours = hundredths // (100 * 60 * 60)
     unparse_mins = (hundredths // (100 * 60)) % 60

@@ -54,6 +54,9 @@ def adjust_timing(
 
         last_idx = i
 
+    if first_idx >= len(time_ranges):
+        return None
+
     first_range = time_ranges[first_idx]
     last_range = time_ranges[last_idx]
 
@@ -83,6 +86,9 @@ def adjust_timing(
 
     sub_start -= cumulative_skip_before
     sub_end -= cumulative_skip_during
+
+    if sub_end <= sub_start:
+        return None
 
     return (sub_start, sub_end)
 
