@@ -1,6 +1,6 @@
 import unittest
 
-from subs2cia.cli_common import modify_subtitles
+from subs2cia.cli_common_subtitle_mods import modify_subtitles
 from subs2cia.subtitles_types import Subtitles, SubtitlesEvent
 
 

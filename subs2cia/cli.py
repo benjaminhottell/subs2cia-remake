@@ -8,7 +8,8 @@ import mimetypes
 import tempfile
 
 from subs2cia import (
-    cli_common,
+    cli_common_subtitle_mods,
+    cli_common_subtitle_extraction,
     path_helpers,
     ffmpeg_helpers,
     subtitles,
@@ -174,7 +175,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         default=None,
     )
 
-    cli_common.add_subtitle_modification_args(parser)
+    cli_common_subtitle_mods.add_subtitle_modification_args(parser)
 
     parser.add_argument(
         '--scratch-path',
@@ -403,7 +404,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             'subtitles-extracted' + extraction_suffix,
         )
 
-        extracted_subs_path = cli_common.optionally_extract_subtitles(
+        extracted_subs_path = cli_common_subtitle_extraction.optionally_extract_subtitles(
             ffprobe=ffprobe,
             ffmpeg_cmd=ffmpeg_cmd,
             subs_path=input_subs_path,
@@ -421,7 +422,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
 
         # Apply subtitle modifications
-        cli_common.modify_subtitles_with_user_args(subs, args)
+        cli_common_subtitle_mods.modify_subtitles_with_user_args(subs, args)
 
 
         # From the subtitles we can extract the times in which subtitles would be on-screen
