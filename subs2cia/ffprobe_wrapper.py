@@ -81,10 +81,10 @@ class FfprobeResult:
         codec_type: str|None = None,
     ) -> FfprobeStream|None:
 
-        streams = self.get_streams()
-
-        if index is not None:
-            return streams[index]
+        if index is None:
+            streams = self.get_streams()
+        else:
+            streams = [self.get_streams()[index]]
 
         for stream in streams:
 

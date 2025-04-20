@@ -8,6 +8,7 @@ import mimetypes
 import tempfile
 
 from subs2cia import (
+    cli_common,
     path_helpers,
     ffmpeg_helpers,
     subtitles,
@@ -290,16 +291,19 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
     if not allow_overwrite:
 
-        paths_already_existing = list()
+        paths_already_existing = set()
 
         if os.path.exists(output_path):
-            paths_already_existing.append(output_path)
+            paths_already_existing.add(output_path)
 
         if os.path.exists(output_subs_path):
-            paths_already_existing.append(output_subs_path)
+            paths_already_existing.add(output_subs_path)
 
         if len(paths_already_existing) > 0:
-            print('Output path already exists:', output_path, file=sys.stderr)
+
+            for clashing_path in paths_already_existing:
+                print('Output path already exists:', clashing_path, file=sys.stderr)
+
             print('Pass --overwrite (or -w) to overwrite this output file.', file=sys.stderr)
             print('Or, use --output-path (or -o) to specify a different path.', file=sys.stderr)
             return 1
@@ -360,7 +364,6 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
         audio_probe: FfprobeResult|None = None
         video_probe: FfprobeResult|None = None
-        subs_probe: FfprobeResult|None = None
 
         if input_audio_path is not None:
             audio_probe = ffprobe.probe(
@@ -372,16 +375,6 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
                 target_path=input_video_path,
             )
 
-        # We also need to probe the subtitles file,
-        # but only if it is NOT a standalone subtitles file that this codebase supports
-
-        subs_is_standalone = subtitles.is_supported_file(input_subs_path)
-
-        if not subs_is_standalone:
-            subs_probe = ffprobe.probe(
-                target_path=input_subs_path,
-            )
-
 
         # Each input file consists of one or more streams
         # (Unless the subtitles file is a standalone subtitles file)
@@ -389,7 +382,6 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
         audio_stream: FfprobeStream|None = None
         video_stream: FfprobeStream|None = None
-        subs_stream: FfprobeStream|None = None
 
         if audio_probe is not None:
             audio_stream = audio_probe.get_first_stream_matching(
@@ -403,17 +395,9 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
                 codec_type='video',
             )
 
-        if subs_probe is not None:
-            subs_stream = subs_probe.get_first_stream_matching(
-                index=input_subs_index,
-                codec_type='subtitle',
-            )
-
-
         # Avoid confusion, use get_index() on the stream itself :)
         del input_audio_index
         del input_video_index
-        del input_subs_index
 
 
         # Error condition check
@@ -422,47 +406,26 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             return 1
 
 
-        # Next we need to parse the subtitles
+        extraction_suffix = '.ass'
 
-        # There are three scenarios:
-        # 1. The subtitles are a standalone file that we can handle natively
-        # 2. The subtitles are a standalone file that we CANNOT handle natively
-        # 3. The subtitles are embedded as a stream (not a standalone file)
+        extraction_path = os.path.join(
+            scratch_path,
+            'subtitles-extracted' + extraction_suffix,
+        )
 
-        # Case 2 can be handled as case 3, treating the subtitles as a stream embedded in a single-stream file
+        extracted_subs_path = cli_common.optionally_extract_subtitles(
+            ffprobe=ffprobe,
+            ffmpeg_cmd=ffmpeg_cmd,
+            subs_path=input_subs_path,
+            subs_index=input_subs_index,
+            extraction_path=extraction_path,
+        )
 
-        # In cases 2/3, we need to 'extract' (demux) the subtitles stream into a supported format
-        # The codebase supports '.ass' files so this is a reasonable format to extract to
+        # prefer extracted_subs_path now
+        del input_subs_path
 
-        if not subs_is_standalone:
-
-            # Case: Demux the subtitles, parse them
-
-            if subs_stream is None:
-                print('Cannot find a subtitles stream or supported subtitles file', file=sys.stderr)
-                print('Input subs. path:', input_subs_path, file=sys.stderr)
-                return 1
-
-            extraction_suffix = '.ass'
-
-            extraction_path = os.path.join(
-                scratch_path,
-                'subtitles-extracted' + extraction_suffix,
-            )
-
-            ffmpeg_helpers.demux_stream(
-                ffmpeg_cmd=ffmpeg_cmd,
-                input_path=input_subs_path,
-                stream_index=subs_stream.get_index(),
-                output_path=extraction_path,
-                overwrite=True,
-            )
-
-            input_subs_path = extraction_path
-
-        # Case: Parse the standalone, supported subtitles
         subs = subtitles.parse_at_path(
-            input_subs_path,
+            extracted_subs_path,
             encoding=input_subs_encoding,
         )
 
@@ -503,7 +466,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             'subtitles-retimed' + retime_suffix,
         )
 
-        with open(input_subs_path, 'r') as retime_in_file:
+        with open(extracted_subs_path, 'r') as retime_in_file:
 
             with open(retime_path, 'w') as retime_out_file:
 
