@@ -1,3 +1,5 @@
+import typing as ty
+
 from subs2cia import (
     subtitles,
     ffmpeg_helpers,
@@ -61,6 +63,8 @@ def optionally_extract_subtitles(
 def modify_subtitles(
     subs: subtitles.Subtitles,
     keep_blank: bool = False,
+    remove_containing: ty.Iterable[str]|None = None,
+    keep_containing: ty.Iterable[str]|None = None,
 ) -> None:
     '''
     Perform common operations on a given Subtitles object. The object is modified in-place.
@@ -70,4 +74,12 @@ def modify_subtitles(
 
     if not keep_blank:
         subs.filter_events(lambda e: len(e.plain_text.strip()) != 0)
+
+    if remove_containing is not None:
+        for x in remove_containing:
+            subs.filter_events(lambda e: x not in e.plain_text)
+
+    if keep_containing is not None:
+        for x in keep_containing:
+            subs.filter_events(lambda e: x in e.plain_text)
 
