@@ -174,35 +174,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         default=None,
     )
 
-    parser.add_argument(
-        '--keep-blank-subs', '--keep-blank-subtitles',
-        help=(
-            'Do not automatically remove subtitles with blank text. '
-            '(Blank refers to text that is either empty or consists entirely of whitespace characters)'
-        ),
-        action='store_true',
-        default=False,
-    )
-
-    parser.add_argument(
-        '--remove-subs-containing', '--remove-subtitles-containing',
-        help=(
-            'Remove subtitles containing the given string. '
-            'The comparison is case sensitive. '
-            'You may specify this command multiple times.'
-        ),
-        action='append',
-    )
-
-    parser.add_argument(
-        '--keep-subs-containing', '--keep-subtitles-containing',
-        help=(
-            'Keep only subtitles containing the given string. '
-            'The comparison is case sensitive. '
-            'You may specify this command multiple times.'
-        ),
-        action='append',
-    )
+    cli_common.add_subtitle_modification_args(parser)
 
     parser.add_argument(
         '--scratch-path',
@@ -246,10 +218,6 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
     output_subs_path: str|None = args.output_subs_path
 
     allow_overwrite: bool = args.overwrite
-
-    subs_keep_blank: bool = args.keep_blank_subs
-    subs_remove_containing: ty.Sequence[str] = args.remove_subs_containing
-    subs_keep_containing: ty.Sequence[str] = args.keep_subs_containing
 
     ffmpeg_cmd: str = args.ffmpeg_cmd
 
@@ -453,13 +421,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
 
         # Apply subtitle modifications
-
-        cli_common.modify_subtitles(
-            subs=subs,
-            keep_blank=subs_keep_blank,
-            remove_containing=subs_remove_containing,
-            keep_containing=subs_keep_containing,
-        )
+        cli_common.modify_subtitles_with_user_args(subs, args)
 
 
         # From the subtitles we can extract the times in which subtitles would be on-screen

@@ -1,5 +1,7 @@
 import typing as ty
 
+import argparse
+
 from subs2cia import (
     subtitles,
     ffmpeg_helpers,
@@ -60,6 +62,53 @@ def optionally_extract_subtitles(
     return extraction_path
 
 
+def add_subtitle_modification_args(
+    parser: argparse.ArgumentParser
+) -> None:
+    '''
+    Adds the following arguments to your argument parser:
+
+    - `subs_keep_blank`
+    - `subs_remove_containing`
+    - `subs_keep_containing`
+
+    They are intended for use with the function `modify_subtitles_with_user_args`.
+    '''
+
+    parser.add_argument(
+        '--keep-blank-subs', '--keep-blank-subtitles',
+        dest='subs_keep_blank',
+        help=(
+            'Do not automatically remove subtitles with blank text. '
+            '(Blank refers to text that is either empty or consists entirely of whitespace characters)'
+        ),
+        action='store_true',
+        default=False,
+    )
+
+    parser.add_argument(
+        '--remove-subs-containing', '--remove-subtitles-containing',
+        dest='subs_remove_containing',
+        help=(
+            'Remove subtitles containing the given string. '
+            'The comparison is case sensitive. '
+            'You may specify this command multiple times.'
+        ),
+        action='append',
+    )
+
+    parser.add_argument(
+        '--keep-subs-containing', '--keep-subtitles-containing',
+        dest='subs_keep_containing',
+        help=(
+            'Keep only subtitles containing the given string. '
+            'The comparison is case sensitive. '
+            'You may specify this command multiple times.'
+        ),
+        action='append',
+    )
+
+
 def modify_subtitles(
     subs: subtitles.Subtitles,
     keep_blank: bool = False,
@@ -82,4 +131,16 @@ def modify_subtitles(
     if keep_containing is not None:
         for x in keep_containing:
             subs.filter_events(lambda e: x in e.plain_text)
+
+
+def modify_subtitles_with_user_args(
+    subs: subtitles.Subtitles,
+    args: argparse.Namespace,
+) -> None:
+    return modify_subtitles(
+        subs,
+        keep_blank=args.subs_keep_blank,
+        remove_containing=args.subs_remove_containing,
+        keep_containing=args.subs_keep_containing,
+    )
 
