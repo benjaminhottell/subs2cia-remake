@@ -432,8 +432,10 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
         # Apply subtitle modifications
 
-        if not subs_keep_blank:
-            subs.filter_events(lambda e: len(e.plain_text.strip()) != 0)
+        cli_common.modify_subtitles(
+            subs=subs,
+            keep_blank=subs_keep_blank,
+        )
 
 
         # From the subtitles we can extract the times in which subtitles would be on-screen

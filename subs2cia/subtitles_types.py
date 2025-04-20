@@ -38,6 +38,7 @@ class Subtitles:
         self,
         test: ty.Callable[[SubtitlesEvent], bool],
     ) -> ty.Self:
+        '''Remove events that do not match the given predicate function.'''
         self.events = [x for x in self.events if test(x)]
         return self
 

@@ -57,3 +57,17 @@ def optionally_extract_subtitles(
 
     return extraction_path
 
+
+def modify_subtitles(
+    subs: subtitles.Subtitles,
+    keep_blank: bool = False,
+) -> None:
+    '''
+    Perform common operations on a given Subtitles object. The object is modified in-place.
+
+    If `keep_blank` is False, subtitles that are empty or solely whitespace will be removed.
+    '''
+
+    if not keep_blank:
+        subs.filter_events(lambda e: len(e.plain_text.strip()) != 0)
+
