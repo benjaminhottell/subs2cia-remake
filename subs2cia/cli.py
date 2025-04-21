@@ -9,6 +9,7 @@ import tempfile
 
 from subs2cia import (
     cli_common_input_streams,
+    cli_common_padding,
     cli_common_subtitle_mods,
     cli_common_subtitle_extraction,
     path_helpers,
@@ -67,39 +68,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         default=False,
     )
 
-    parser.add_argument(
-        '-p', '--padding',
-        help=(
-            'Add some number of seconds to the start and end of each subtitle. '
-            'This value may be a floating point value (e.g. 1.5). '
-            'It may be rounded if it is strangely precise (e.g. 1.000000001 -> 1.0). '
-            'Mutually exclusive with --padding-start and --padding-end.'
-        ),
-        type=float,
-        default=None,
-    )
-
-    parser.add_argument(
-        '-ps', '--padding-start',
-        help=(
-            'Add some number of seconds to the start of each subtitle. '
-            'Follows the same semantics as --padding, though it is mutually exclusive with --padding. '
-            'See also --padding-end'
-        ),
-        type=float,
-        default=None,
-    )
-
-    parser.add_argument(
-        '-pe', '--padding-end',
-        help=(
-            'Add some number of seconds to the end of each subtitle. '
-            'Follows the same semantics as --padding, though it is mutually exclusive with --padding. '
-            'See also --padding-start'
-        ),
-        type=float,
-        default=None,
-    )
+    cli_common_padding.add_padding_args(parser)
 
     cli_common_subtitle_mods.add_subtitle_modification_args(parser)
 
@@ -208,29 +177,6 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             print('Pass --overwrite (or -w) to overwrite this output file.', file=sys.stderr)
             print('Or, use --output-path (or -o) to specify a different path.', file=sys.stderr)
             return 1
-
-
-    # Resolve padding options
-
-    padding = args.padding
-    padding_start = args.padding_start
-    padding_end = args.padding_end
-
-    if padding is not None:
-
-        if padding_start is not None or padding_end is not None:
-            print('Cannot simultaneously use --padding and --padding-start/--padding-end', file=sys.stderr)
-            return 1
-
-        padding_start = padding
-        padding_end = padding
-
-    else:
-        if padding_start is None:
-            padding_start = 0.0
-        if padding_end is None:
-            padding_end = 0.0
-
 
 
     # Resolve wrappers to external binaries
@@ -352,12 +298,10 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
 
         # Apply padding options to the subtitle timings
-        # 1/100 of a second accuracy is 'good enough'
 
-        subs_time_ranges.add_padding(
-            pad_start=round(padding_start * 100),
-            pad_end=round(padding_end * 100),
-            pad_ups=100,
+        cli_common_padding.apply_padding_from_user_args(
+            subs_time_ranges,
+            args,
         )
 
 
