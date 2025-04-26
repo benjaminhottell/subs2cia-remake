@@ -32,7 +32,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(
-        prog='subs2cia',
+        prog='condense',
         description='Generate condensed audio files from an audio/video file and subtitles.',
     )
 
