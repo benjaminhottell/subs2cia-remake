@@ -8,7 +8,10 @@ import mimetypes
 import tempfile
 
 from subs2cia import (
-    cli_common,
+    cli_common_input_streams,
+    cli_common_padding,
+    cli_common_subtitle_mods,
+    cli_common_subtitle_extraction,
     path_helpers,
     ffmpeg_helpers,
     subtitles,
@@ -29,86 +32,11 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(
-        prog='subs2cia',
+        prog='condense',
         description='Generate condensed audio files from an audio/video file and subtitles.',
     )
 
-    parser.add_argument(
-        '-i', '--input-path',
-        help=(
-            'The audio/video file with embedded subtitles to condense. '
-            'You may also use the arguments '
-            '--input-video-path, --input-audio-path, and --input-subs-path '
-            'in the case where the contents are spread across multiple files.'
-        ),
-        default=None,
-    )
-
-    parser.add_argument(
-        '-iv', '--input-video-path',
-        help=(
-            'The path to the file containing the video to use. '
-            'If not specified, defaults to the path specified via --input-path.'
-        ),
-        default=None,
-    )
-
-    parser.add_argument(
-        '-ia', '--input-audio-path',
-        help=(
-            'The path to the file containing the audio to use. '
-            'If not specified, defaults to the path specified via --input-path.'
-        ),
-        default=None,
-    )
-
-    parser.add_argument(
-        '-is', '--input-subs-path', '--input-subtitles-path',
-        help=(
-            'The path to the file containing the subtitles to use. '
-            'If not specified, defaults to the path specified via --input-path.'
-        ),
-        default=None,
-    )
-
-    parser.add_argument(
-        '-ise', '--input-subs-encoding', '--input-subtitles-encoding',
-        help=(
-            'The encoding of the subtitles file. '
-            'Default: %(default)s'
-        ),
-        default='utf-8',
-    )
-
-    parser.add_argument(
-        '-ivs', '--input-video-stream',
-        help=(
-            'The specific stream index for the video contained in '
-            '--input-video-path or --input-path.'
-        ),
-        type=int,
-        default=None,
-    )
-
-    parser.add_argument(
-        '-ias', '--input-audio-stream',
-        help=(
-            'The specific stream index for the audio contained in '
-            '--input-audio-path or --input-path.'
-        ),
-        type=int,
-        default=None,
-    )
-
-    parser.add_argument(
-        '-iss', '--input-subs-stream',
-        help=(
-            'The specific stream index for the subtitles contained in '
-            '--input-subs-path or --input-path.'
-        ),
-        type=int,
-        default=None,
-    )
+    cli_common_input_streams.add_input_streams_args(parser)
 
     parser.add_argument(
         '-o', '--output-path',
@@ -140,69 +68,9 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         default=False,
     )
 
-    parser.add_argument(
-        '-p', '--padding',
-        help=(
-            'Add some number of seconds to the start and end of each subtitle. '
-            'This value may be a floating point value (e.g. 1.5). '
-            'It may be rounded if it is strangely precise (e.g. 1.000000001 -> 1.0). '
-            'Mutually exclusive with --padding-start and --padding-end.'
-        ),
-        type=float,
-        default=None,
-    )
+    cli_common_padding.add_padding_args(parser)
 
-    parser.add_argument(
-        '-ps', '--padding-start',
-        help=(
-            'Add some number of seconds to the start of each subtitle. '
-            'Follows the same semantics as --padding, though it is mutually exclusive with --padding. '
-            'See also --padding-end'
-        ),
-        type=float,
-        default=None,
-    )
-
-    parser.add_argument(
-        '-pe', '--padding-end',
-        help=(
-            'Add some number of seconds to the end of each subtitle. '
-            'Follows the same semantics as --padding, though it is mutually exclusive with --padding. '
-            'See also --padding-start'
-        ),
-        type=float,
-        default=None,
-    )
-
-    parser.add_argument(
-        '--keep-blank-subs', '--keep-blank-subtitles',
-        help=(
-            'Do not automatically remove subtitles with blank text. '
-            '(Blank refers to text that is either empty or consists entirely of whitespace characters)'
-        ),
-        action='store_true',
-        default=False,
-    )
-
-    parser.add_argument(
-        '--remove-subs-containing', '--remove-subtitles-containing',
-        help=(
-            'Remove subtitles containing the given string. '
-            'The comparison is case sensitive. '
-            'You may specify this command multiple times.'
-        ),
-        action='append',
-    )
-
-    parser.add_argument(
-        '--keep-subs-containing', '--keep-subtitles-containing',
-        help=(
-            'Keep only subtitles containing the given string. '
-            'The comparison is case sensitive. '
-            'You may specify this command multiple times.'
-        ),
-        action='append',
-    )
+    cli_common_subtitle_mods.add_subtitle_modification_args(parser)
 
     parser.add_argument(
         '--scratch-path',
@@ -230,34 +98,25 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    input_path: str|None = args.input_path
-
-    input_audio_path: str|None = args.input_audio_path
-    input_audio_index: int|None = args.input_audio_stream
-
-    input_video_path: str|None = args.input_video_path
-    input_video_index: int|None = args.input_video_stream
-
-    input_subs_path: str|None = args.input_subs_path
-    input_subs_index: int|None = args.input_subs_stream
-    input_subs_encoding: str = args.input_subs_encoding
+    inputs = cli_common_input_streams.resolve_input_streams_from_user_args(args)
 
     output_path: str|None = args.output_path
     output_subs_path: str|None = args.output_subs_path
 
     allow_overwrite: bool = args.overwrite
 
-    subs_keep_blank: bool = args.keep_blank_subs
-    subs_remove_containing: ty.Sequence[str] = args.remove_subs_containing
-    subs_keep_containing: ty.Sequence[str] = args.keep_subs_containing
-
     ffmpeg_cmd: str = args.ffmpeg_cmd
 
 
     # Resolve path to output
     if output_path is None:
-        if input_path is not None:
-            output_path = path_helpers.swap_ext(input_path, '.condensed.mp3')
+
+        if inputs.default_input_path is not None:
+            output_path = path_helpers.swap_ext(
+                inputs.default_input_path,
+                '.condensed.mp3',
+            )
+
         else:
             print('Missing --output-path (-o) or --input-path (-i)', file=sys.stderr)
             print('Use --help for more information', file=sys.stderr)
@@ -284,29 +143,18 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         and output_format_mime.startswith('audio/')
     )
 
-
-    # Resolve paths to input video/audio/subs input
-    if input_video_path is None:
-        input_video_path = input_path
-    if input_audio_path is None:
-        input_audio_path = input_path
-    if input_subs_path is None:
-        input_subs_path = input_path
-
     # If the output is audio, intercept and discard the video
     if ignore_video:
-        input_video_path = None
+        inputs.discard_video()
 
-    # Avoid accidental mis-use, favor the more specific paths defined immediately above
-    del input_path
 
     # Sanity checks on inputs
 
-    if input_video_path is None and input_audio_path is None:
+    if inputs.video_path is None and inputs.audio_path is None:
         print('No video or audio input specified.', file=sys.stderr)
         return 1
 
-    if input_subs_path is None:
+    if inputs.subs_path is None:
         print('No subtitles input specified.', file=sys.stderr)
         return 1
 
@@ -329,29 +177,6 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             print('Pass --overwrite (or -w) to overwrite this output file.', file=sys.stderr)
             print('Or, use --output-path (or -o) to specify a different path.', file=sys.stderr)
             return 1
-
-
-    # Resolve padding options
-
-    padding = args.padding
-    padding_start = args.padding_start
-    padding_end = args.padding_end
-
-    if padding is not None:
-
-        if padding_start is not None or padding_end is not None:
-            print('Cannot simultaneously use --padding and --padding-start/--padding-end', file=sys.stderr)
-            return 1
-
-        padding_start = padding
-        padding_end = padding
-
-    else:
-        if padding_start is None:
-            padding_start = 0.0
-        if padding_end is None:
-            padding_end = 0.0
-
 
 
     # Resolve wrappers to external binaries
@@ -387,14 +212,14 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         audio_probe: FfprobeResult|None = None
         video_probe: FfprobeResult|None = None
 
-        if input_audio_path is not None:
+        if inputs.audio_path is not None:
             audio_probe = ffprobe.probe(
-                target_path=input_audio_path,
+                target_path=inputs.audio_path,
             )
 
-        if input_video_path is not None:
+        if inputs.video_path is not None:
             video_probe = ffprobe.probe(
-                target_path=input_video_path,
+                target_path=inputs.video_path,
             )
 
 
@@ -406,20 +231,28 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         video_stream: FfprobeStream|None = None
 
         if audio_probe is not None:
+
             audio_stream = audio_probe.get_first_stream_matching(
-                index=input_audio_index,
+                index=inputs.audio_stream_index,
                 codec_type='audio',
             )
 
+            if audio_stream is not None:
+                inputs.audio_stream_index = audio_stream.get_index()
+            else:
+                inputs.audio_stream_index = None
+
         if video_probe is not None:
+
             video_stream = video_probe.get_first_stream_matching(
-                index=input_video_index,
+                index=inputs.video_stream_index,
                 codec_type='video',
             )
 
-        # Avoid confusion, use get_index() on the stream itself :)
-        del input_audio_index
-        del input_video_index
+            if video_stream is not None:
+                inputs.video_stream_index = video_stream.get_index()
+            else:
+                inputs.video_stream_index = None
 
 
         # Error condition check
@@ -435,31 +268,22 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             'subtitles-extracted' + extraction_suffix,
         )
 
-        extracted_subs_path = cli_common.optionally_extract_subtitles(
+        inputs.subs_path = cli_common_subtitle_extraction.optionally_extract_subtitles(
             ffprobe=ffprobe,
             ffmpeg_cmd=ffmpeg_cmd,
-            subs_path=input_subs_path,
-            subs_index=input_subs_index,
+            subs_path=inputs.subs_path,
+            subs_index=inputs.subs_stream_index,
             extraction_path=extraction_path,
         )
 
-        # prefer extracted_subs_path now
-        del input_subs_path
-
         subs = subtitles.parse_at_path(
-            extracted_subs_path,
-            encoding=input_subs_encoding,
+            inputs.subs_path,
+            encoding=inputs.subs_encoding,
         )
 
 
         # Apply subtitle modifications
-
-        cli_common.modify_subtitles(
-            subs=subs,
-            keep_blank=subs_keep_blank,
-            remove_containing=subs_remove_containing,
-            keep_containing=subs_keep_containing,
-        )
+        cli_common_subtitle_mods.modify_subtitles_with_user_args(subs, args)
 
 
         # From the subtitles we can extract the times in which subtitles would be on-screen
@@ -474,12 +298,10 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
 
 
         # Apply padding options to the subtitle timings
-        # 1/100 of a second accuracy is 'good enough'
 
-        subs_time_ranges.add_padding(
-            pad_start=round(padding_start * 100),
-            pad_end=round(padding_end * 100),
-            pad_ups=100,
+        cli_common_padding.apply_padding_from_user_args(
+            subs_time_ranges,
+            args,
         )
 
 
@@ -492,7 +314,7 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
             'subtitles-retimed' + retime_suffix,
         )
 
-        with open(extracted_subs_path, 'r') as retime_in_file:
+        with open(inputs.subs_path, 'r') as retime_in_file:
 
             with open(retime_path, 'w') as retime_out_file:
 
@@ -536,19 +358,19 @@ def main(argv: ty.Sequence[str]|None = None) -> int:
         video_file_index: int|None = None
         audio_file_index: int|None = None
 
-        if input_audio_path is not None:
+        if inputs.audio_path is not None:
             try:
-                audio_file_index = input_files.index(input_audio_path)
+                audio_file_index = input_files.index(inputs.audio_path)
             except ValueError:
                 audio_file_index = len(input_files)
-                input_files.append(input_audio_path)
+                input_files.append(inputs.audio_path)
 
-        if input_video_path is not None:
+        if inputs.video_path is not None:
             try:
-                video_file_index = input_files.index(input_video_path)
+                video_file_index = input_files.index(inputs.video_path)
             except ValueError:
                 video_file_index = len(input_files)
-                input_files.append(input_video_path)
+                input_files.append(inputs.video_path)
 
 
         # Given these time ranges, we can create a ffmpeg filter to trim the audio and/or video down
